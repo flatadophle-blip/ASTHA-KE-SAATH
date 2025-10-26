@@ -1,0 +1,10 @@
+"name": "backuphaiyaarh-api",
+  "version": "1.0.0",
+  "description": "Phone info API",
+  "main": "api/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "dependencies": {}
+}
