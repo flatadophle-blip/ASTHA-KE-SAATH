@@ -1,10 +1,9 @@
-"name": "backuphaiyaarh-api",
+{
+  "name": "gmail-info-zx",
   "version": "1.0.0",
-  "description": "Phone info API",
-  "main": "api/index.js",
   "type": "module",
-  "scripts": {
-    "start": "node api/index.js"
-  },
-  "dependencies": {}
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "whois-json": "^2.0.4"
+  }
 }
