@@ -1,122 +1,77 @@
 import dns from "dns/promises";
-import net from "net";
 import tls from "tls";
 import whois from "whois-json";
 import fetch from "node-fetch";
 
-// 🔐 MULTIPLE API KEYS
-const VALID_API_KEYS = [
-  "zxcracks",
-  "ZXOSINT456",
-  "ZX-PRIVATE-KEY"
-];
-
+// API keys
+const VALID_API_KEYS = ["zxcracks", "ZXOSINT456", "ZX-PRIVATE-KEY"];
 const API_BY = "zx osint tg @zxosint";
 
 export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({
-      error: "Method not allowed",
-      api_by: API_BY
-    });
-  }
-
-  // 🔐 API KEY CHECK
-  const apiKey = req.headers["x-api-key"];
-  if (!apiKey || !VALID_API_KEYS.includes(apiKey)) {
-    return res.status(401).json({
-      error: "Invalid or missing API key",
-      api_by: API_BY
-    });
-  }
-
-  const email = req.query.mail;
-  if (!email) {
-    return res.status(400).json({
-      error: "Please provide ?mail= parameter",
-      api_by: API_BY
-    });
-  }
+  res.setHeader("Content-Type", "application/json");
 
   try {
+    if (req.method !== "GET") throw new Error("Method not allowed");
+
+    // Check API key
+    const apiKey = req.headers["x-api-key"];
+    if (!apiKey || !VALID_API_KEYS.includes(apiKey)) {
+      return res.status(401).json({ error: "Invalid or missing API key", api_by: API_BY });
+    }
+
+    const email = req.query.mail;
+    if (!email) throw new Error("Please provide ?mail= parameter");
+
     const domain = email.split("@")[1]?.toLowerCase();
-    if (!domain) {
-      return res.status(400).json({
-        error: "Invalid email format",
-        api_by: API_BY
-      });
-    }
+    if (!domain) throw new Error("Invalid email format");
 
-    // MX RECORDS
+    // MX Records
     let mxRecords = [];
-    try {
-      const mx = await dns.resolveMx(domain);
-      mxRecords = mx.map(r => r.exchange);
-    } catch {
-      mxRecords = ["No MX record found"];
-    }
+    try { mxRecords = (await dns.resolveMx(domain)).map(r => r.exchange); } 
+    catch { mxRecords = ["Unavailable"]; }
 
-    // DOMAIN IP
-    let ipAddr = "Unknown";
-    try {
-      const lookup = await dns.lookup(domain);
-      ipAddr = lookup.address;
-    } catch {}
+    // Domain IP
+    let ipAddr = "Unavailable";
+    try { ipAddr = (await dns.lookup(domain)).address; } 
+    catch {}
 
-    // SSL ISSUER
-    let sslIssuer = "Unknown";
+    // SSL Issuer
+    let sslIssuer = "Unavailable";
     try {
       await new Promise((resolve, reject) => {
-        const socket = tls.connect(
-          443,
-          domain,
-          { servername: domain },
-          () => {
-            const cert = socket.getPeerCertificate();
-            sslIssuer =
-              cert?.issuer?.O ||
-              cert?.issuer?.organizationName ||
-              "Unknown";
-            socket.end();
-            resolve();
-          }
-        );
-        socket.on("error", reject);
+        const socket = tls.connect(443, domain, { servername: domain }, () => {
+          const cert = socket.getPeerCertificate();
+          sslIssuer = cert?.issuer?.O || cert?.issuer?.organizationName || "Unavailable";
+          socket.end(); resolve();
+        });
+        socket.on("error", () => resolve()); // ignore errors
       });
     } catch {}
 
     // WHOIS
-    let registrar = "Unknown";
-    let creationDate = "Unknown";
-    let expirationDate = "Unknown";
+    let registrar = "Unavailable", creationDate = "Unavailable", expirationDate = "Unavailable";
     try {
-      const w = await whois(domain);
-      registrar = w.registrar || "Unknown";
-      creationDate = w.creationDate || "Unknown";
-      expirationDate = w.registryExpiryDate || "Unknown";
+      const w = await whois(domain).catch(() => ({}));
+      registrar = w.registrar || "Unavailable";
+      creationDate = w.creationDate || "Unavailable";
+      expirationDate = w.registryExpiryDate || "Unavailable";
     } catch {}
 
-    // ISP + LOCATION
-    let isp = "Unknown";
-    let location = "Unknown";
-    if (ipAddr !== "Unknown") {
+    // ISP & Location
+    let isp = "Unavailable", location = "Unavailable";
+    if (ipAddr !== "Unavailable") {
       try {
         const ipInfo = await fetch(`http://ip-api.com/json/${ipAddr}`).then(r => r.json());
-        isp = ipInfo.isp || "Unknown";
-        location = `${ipInfo.city || "Unknown"}, ${ipInfo.country || "Unknown"}`;
+        isp = ipInfo.isp || "Unavailable";
+        location = `${ipInfo.city || "Unavailable"}, ${ipInfo.country || "Unavailable"}`;
       } catch {}
     }
 
-    // DISPOSABLE CHECK
-    const disposableDomains = [
-      "tempmail.com",
-      "10minutemail.com",
-      "yopmail.com",
-      "guerrillamail.com"
-    ];
+    // Disposable
+    const disposableDomains = ["tempmail.com","10minutemail.com","yopmail.com","guerrillamail.com"];
     const disposable = disposableDomains.includes(domain) ? "Yes" : "No";
 
-    // RESPONSE
+    // Respond
     return res.status(200).json({
       email,
       domain,
@@ -133,9 +88,7 @@ export default async function handler(req, res) {
     });
 
   } catch (err) {
-    return res.status(500).json({
-      error: err.message,
-      api_by: API_BY
-    });
+    // Always return JSON on crash
+    return res.status(500).json({ error: err.message, api_by: API_BY });
   }
 }
